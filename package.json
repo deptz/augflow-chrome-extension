@@ -1,0 +1,43 @@
+{
+  "name": "augflow-jira-bridge",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Chrome/Edge extension: import Jira Cloud issues into local Augflow over HTTP",
+  "license": "MIT",
+  "keywords": [
+    "augflow",
+    "chrome-extension",
+    "edge-extension",
+    "jira",
+    "manifest-v3",
+    "atlassian"
+  ],
+  "homepage": "https://github.com/deptz/augflow-chrome-extension#readme",
+  "bugs": {
+    "url": "https://github.com/deptz/augflow-chrome-extension/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deptz/augflow-chrome-extension.git"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "verify": "npm run lint && npx tsc --noEmit && npm test && npm run build",
+    "release:zip": "npm run build && node scripts/package-zip.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.39.2",
+    "globals": "^16.5.0",
+    "happy-dom": "^20.4.3",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.53.1",
+    "vitest": "^4.0.17"
+  }
+}

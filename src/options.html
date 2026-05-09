@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Augflow Jira Bridge — Options</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 40rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.5;
+        color: #172b4d;
+      }
+      h1 {
+        font-size: 1.25rem;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-top: 1rem;
+      }
+      input[type="text"],
+      input[type="password"],
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 0.25rem;
+        padding: 0.5rem;
+        border: 1px solid #dfe1e6;
+        border-radius: 4px;
+        font: inherit;
+      }
+      textarea {
+        min-height: 2.5rem;
+      }
+      .hint {
+        font-size: 0.85rem;
+        color: #5e6c84;
+        margin-top: 0.25rem;
+      }
+      .row {
+        margin-top: 1rem;
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      button {
+        padding: 0.45rem 0.85rem;
+        border-radius: 4px;
+        border: 1px solid #0052cc;
+        background: #0052cc;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #fff;
+        color: #0052cc;
+      }
+      #status {
+        margin-top: 1rem;
+        padding: 0.75rem;
+        border-radius: 4px;
+        display: none;
+      }
+      #status.visible {
+        display: block;
+      }
+      #status.ok {
+        background: #e3fcef;
+        border: 1px solid #36b37e;
+      }
+      #status.err {
+        background: #ffebe6;
+        border: 1px solid #de350b;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Augflow Jira Bridge</h1>
+    <p>
+      Targets <code>augflow serve</code> on your machine (default port 4400). Import uses
+      <code>POST /api/tasks/jira/import-by-key</code> and optionally
+      <code>POST /api/cards/start</code>.
+    </p>
+
+    <label for="augflowBaseUrl">Augflow base URL</label>
+    <input id="augflowBaseUrl" type="text" autocomplete="off" />
+    <p class="hint">Default <code>http://localhost:4400</code>. Must be <code>http://localhost</code> or <code>http://127.0.0.1</code> with an allowlisted port.</p>
+
+    <label for="projectPath">Project path (<code>X-Project-Path</code>)</label>
+    <textarea id="projectPath" rows="2" spellcheck="false" placeholder="/absolute/path/to/your/project"></textarea>
+    <p class="hint">Absolute path to the Augflow-registered project on this machine.</p>
+
+    <label for="apiToken">API token (optional)</label>
+    <input id="apiToken" type="password" autocomplete="off" placeholder="Bearer token if api.api_token is set" />
+    <p class="hint">Stored only in extension sync storage; never injected into Jira pages.</p>
+
+    <label class="row" style="margin-top: 1.25rem">
+      <input id="autoStartCard" type="checkbox" />
+      After import, start a card automatically
+    </label>
+
+    <div class="row">
+      <button type="button" id="save">Save</button>
+      <button type="button" class="secondary" id="testConn">Test connection</button>
+    </div>
+
+    <div id="status"></div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
