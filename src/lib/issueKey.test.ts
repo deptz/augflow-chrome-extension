@@ -45,6 +45,14 @@ describe("extractIssueKeyFromUrl", () => {
     ).toBe("KAN-9");
   });
 
+  it("parses selectedIssue on board with extra query params", () => {
+    expect(
+      extractIssueKeyFromUrl(
+        "https://jurnal.atlassian.net/jira/software/c/projects/BIF/boards/345?issueType=10400%2C1&selectedIssue=BIF-8246"
+      )
+    ).toBe("BIF-8246");
+  });
+
   it("parses issues / issue segments", () => {
     expect(
       extractIssueKeyFromUrl(
@@ -87,5 +95,14 @@ describe("extractIssueKeyFromDom", () => {
   it("returns null when missing", () => {
     document.body.innerHTML = "<div>nope</div>";
     expect(extractIssueKeyFromDom()).toBeNull();
+  });
+
+  it("reads issue key from open dialog browse link", () => {
+    document.body.innerHTML = `
+      <div role="dialog">
+        <a href="/browse/MODAL-42">MODAL-42</a>
+      </div>
+    `;
+    expect(extractIssueKeyFromDom()).toBe("MODAL-42");
   });
 });

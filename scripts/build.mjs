@@ -9,16 +9,20 @@ const dist = path.join(root, "dist");
 
 const watch = process.argv.includes("--watch");
 
-const tinyPng = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-  "base64"
-);
+const ICON_NAMES = ["icon-16.png", "icon-48.png", "icon-128.png"];
 
-function ensureIcons() {
-  const iconsDir = path.join(dist, "icons");
-  fs.mkdirSync(iconsDir, { recursive: true });
-  for (const name of ["icon-16.png", "icon-48.png", "icon-128.png"]) {
-    fs.writeFileSync(path.join(iconsDir, name), tinyPng);
+function copyIcons() {
+  const srcDir = path.join(root, "icons");
+  const destDir = path.join(dist, "icons");
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const name of ICON_NAMES) {
+    const src = path.join(srcDir, name);
+    if (!fs.existsSync(src)) {
+      throw new Error(
+        `Missing ${path.relative(root, src)}. Add icons or run: npm run generate-icons`
+      );
+    }
+    fs.copyFileSync(src, path.join(destDir, name));
   }
 }
 
@@ -26,7 +30,7 @@ function copyStatic() {
   fs.mkdirSync(dist, { recursive: true });
   fs.copyFileSync(path.join(root, "manifest.json"), path.join(dist, "manifest.json"));
   fs.copyFileSync(path.join(root, "src", "options.html"), path.join(dist, "options.html"));
-  ensureIcons();
+  copyIcons();
 }
 
 const buildOpts = {

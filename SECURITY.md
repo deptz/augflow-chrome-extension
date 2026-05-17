@@ -10,4 +10,17 @@ Include:
 - Steps to reproduce
 - Affected versions or commit, if known
 
-This project talks only to **localhost / 127.0.0.1** (Augflow) and **Atlassian Jira Cloud** pages as declared in `manifest.json`. If you are reviewing permissions, start there.
+## Network access
+
+The extension communicates with:
+
+- **Your configured Augflow base URL** (default `http://localhost:4400`, or LAN/HTTPS team server you enter in options). Chrome prompts to grant host permission for non-local origins on save or test.
+- **Atlassian Jira Cloud** (`https://*.atlassian.net/*`) for content scripts and issue key detection.
+
+If you are reviewing permissions, start with `manifest.json` (`host_permissions`, `optional_host_permissions`, `content_scripts`).
+
+## Secrets
+
+An optional **API token** is stored in `chrome.storage.sync` and sent only as `Authorization: Bearer …` to your Augflow origin. It is never injected into Jira page DOM.
+
+Anyone with access to your browser profile can read extension storage — acceptable for solo dev; use a dedicated token and threat model for shared machines.

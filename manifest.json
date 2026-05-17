@@ -1,19 +1,21 @@
 {
   "manifest_version": 3,
   "name": "Augflow Jira Bridge",
-  "version": "0.1.0",
-  "description": "Import the current Jira Cloud issue into Augflow on localhost and optionally start a card.",
+  "version": "0.2.0",
+  "description": "Import the current Jira Cloud issue into Augflow and optionally start a card.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "tabs", "notifications"],
+  "permissions": ["storage", "tabs", "notifications", "contextMenus"],
   "host_permissions": [
     "http://127.0.0.1/*",
     "http://localhost/*",
-    "https://*.atlassian.net/*"
+    "https://127.0.0.1/*",
+    "https://localhost/*"
   ],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -43,6 +45,13 @@
         "mac": "Command+Shift+Y"
       },
       "description": "Import current Jira issue to Augflow"
+    },
+    "import-with-options": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Import with project and start options"
     }
   }
 }

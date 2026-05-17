@@ -1,20 +1,60 @@
-/** Allowed HTTP ports when Augflow URL host is localhost (v1 hardening). */
-const ALLOWED_PORTS = new Set([80, 4400, 3000, 5173, 5174, 8080, 9000, 9090]);
-
 export type AugflowUrlValidation =
   | { ok: true; baseUrl: string }
   | { ok: false; error: string };
 
-function normalizedPort(portPart: string): number {
+export type HostKind = "loopback" | "private" | "public";
+
+function normalizedPort(portPart: string, protocol: string): number {
   if (portPart === "") {
-    return 80;
+    return protocol === "https:" ? 443 : 80;
   }
   const n = Number(portPart);
   return Number.isFinite(n) ? n : NaN;
 }
 
+/** IPv4 private ranges and link-local. */
+function isPrivateIPv4(host: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) {
+    return false;
+  }
+  const octets = m.slice(1, 5).map((x) => Number(x));
+  if (octets.some((o) => o > 255)) {
+    return false;
+  }
+  const [a, b] = octets;
+  if (a === 10) {
+    return true;
+  }
+  if (a === 172 && b >= 16 && b <= 31) {
+    return true;
+  }
+  if (a === 192 && b === 168) {
+    return true;
+  }
+  if (a === 127) {
+    return true;
+  }
+  if (a === 169 && b === 254) {
+    return true;
+  }
+  return false;
+}
+
+export function classifyHost(hostname: string): HostKind {
+  const host = hostname.toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") {
+    return "loopback";
+  }
+  if (isPrivateIPv4(host)) {
+    return "private";
+  }
+  return "public";
+}
+
 /**
- * Validates configured base URL: http only, localhost or 127.0.0.1, allowlisted port.
+ * Validates configured Augflow API base URL (origin only).
+ * Loopback/private: http or https, any port. Public hostnames: https only.
  */
 export function validateAugflowBaseUrl(raw: string): AugflowUrlValidation {
   const trimmed = raw.trim().replace(/\/+$/, "");
@@ -28,27 +68,36 @@ export function validateAugflowBaseUrl(raw: string): AugflowUrlValidation {
     return { ok: false, error: "Augflow base URL is not a valid URL." };
   }
 
-  if (url.protocol !== "http:") {
-    return {
-      ok: false,
-      error: "Use http://localhost or http://127.0.0.1 (no https in v1).",
-    };
+  if (url.username || url.password) {
+    return { ok: false, error: "URL must not include credentials." };
   }
 
-  const host = url.hostname.toLowerCase();
-  if (host !== "127.0.0.1" && host !== "localhost") {
-    return { ok: false, error: "Host must be localhost or 127.0.0.1." };
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return { ok: false, error: "Use http:// or https://." };
   }
 
-  const port = normalizedPort(url.port);
-  if (!Number.isFinite(port) || !ALLOWED_PORTS.has(port)) {
+  const host = url.hostname;
+  if (!host) {
+    return { ok: false, error: "URL must include a host." };
+  }
+
+  const port = normalizedPort(url.port, url.protocol);
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    return { ok: false, error: "URL has an invalid port." };
+  }
+
+  const kind = classifyHost(host);
+  if (kind === "public" && url.protocol !== "https:") {
     return {
       ok: false,
-      error: `Port must be one of: ${Array.from(ALLOWED_PORTS)
-        .sort((a, b) => a - b)
-        .join(", ")}.`,
+      error: "Public hostnames must use https:// (TLS required).",
     };
   }
 
   return { ok: true, baseUrl: `${url.protocol}//${url.host}` };
+}
+
+/** Chrome host permission pattern for a validated base URL. */
+export function originPermissionPattern(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/*`;
 }

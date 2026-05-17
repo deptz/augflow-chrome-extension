@@ -1,15 +1,31 @@
-import { parseApiErrorBody } from "./lib/apiError";
-import { validateAugflowBaseUrl } from "./lib/augflowUrl";
+import {
+  augflowFetchJiraDefaultRepoSlug,
+  augflowListProjects,
+  augflowListRepos,
+  augflowPatchTaskRepo,
+  augflowPost,
+} from "./lib/augflowClient";
 import { extractIssueKeyFromUrl } from "./lib/issueKey";
+import type {
+  FromBackgroundResponse,
+  GetCurrentIssueKeyResponse,
+  ImportDialogDefaults,
+  ListProjectsResponse,
+  ListReposResponse,
+  ToBackgroundMessage,
+} from "./lib/messages";
 import {
   ensureDefaultsOnInstall,
+  getDefaultRepo,
   loadSettings,
-  type ExtensionSettings,
 } from "./lib/storage";
-import type { FromBackgroundResponse, ToBackgroundMessage } from "./lib/messages";
 
 const BADGE_LOADING = "…";
 const NOTIFY_ID = "augflow-jira-bridge";
+const CONTEXT_IMPORT_OPTIONS = "augflow-import-with-options";
+
+/** Per-tab issue key from content script (SPA-aware). */
+const tabIssueKeys = new Map<number, string | null>();
 
 function isJiraCloudHost(hostname: string): boolean {
   return hostname === "atlassian.net" || hostname.endsWith(".atlassian.net");
@@ -30,9 +46,19 @@ function tabIssueKeyFromUrl(url: string | undefined): string | null {
   }
 }
 
+function resolvedTabKey(tabId: number, url: string | undefined): string | null {
+  if (tabIssueKeys.has(tabId)) {
+    const cached = tabIssueKeys.get(tabId);
+    if (cached) {
+      return cached;
+    }
+  }
+  return tabIssueKeyFromUrl(url);
+}
+
 async function setActionStateForTab(tabId: number, url: string | undefined): Promise<void> {
   try {
-    const key = tabIssueKeyFromUrl(url);
+    const key = resolvedTabKey(tabId, url);
     if (key) {
       await chrome.action.enable(tabId);
       await chrome.action.setTitle({
@@ -47,7 +73,7 @@ async function setActionStateForTab(tabId: number, url: string | undefined): Pro
       });
     }
   } catch {
-    /* Restricted URLs (chrome://, etc.) */
+    /* Restricted URLs */
   }
 }
 
@@ -60,65 +86,75 @@ async function refreshAllTabs(): Promise<void> {
   }
 }
 
-async function augflowPost(
-  settings: ExtensionSettings,
-  path: string,
-  body: unknown
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  const v = validateAugflowBaseUrl(settings.augflowBaseUrl);
-  if (!v.ok) {
-    return { ok: false, message: v.error };
-  }
-  const projectPath = settings.projectPath.trim();
-  if (!projectPath) {
-    return { ok: false, message: "Set project path in extension options (X-Project-Path)." };
-  }
+export type ImportFlowOptions = {
+  projectPath?: string;
+  repoSlug?: string;
+  startAfterImport?: boolean;
+};
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-Project-Path": projectPath,
-  };
-  const token = settings.apiToken.trim();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+async function resolveDefaultRepoSlugForProject(
+  settings: Awaited<ReturnType<typeof loadSettings>>,
+  projectPath: string
+): Promise<string> {
+  const stored = getDefaultRepo(settings, projectPath);
+  if (stored) {
+    return stored;
   }
-
-  const url = `${v.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return {
-      ok: false,
-      message: `Cannot reach Augflow (${v.baseUrl}): ${msg}`,
-    };
+  const list = await augflowListRepos(settings, projectPath);
+  if (!list.ok || list.data.repos.length === 0) {
+    return "";
   }
-
-  const text = await res.text();
-  if (!res.ok) {
-    return { ok: false, message: parseApiErrorBody(text) };
+  const jiraDefault = await augflowFetchJiraDefaultRepoSlug(settings, projectPath);
+  if (jiraDefault && list.data.repos.includes(jiraDefault)) {
+    return jiraDefault;
   }
-  return { ok: true };
+  return list.data.repos[0] ?? "";
 }
 
-export async function runImportFlow(issueKey: string): Promise<FromBackgroundResponse> {
+export async function runImportFlow(
+  issueKey: string,
+  options: ImportFlowOptions = {}
+): Promise<FromBackgroundResponse> {
   const settings = await loadSettings();
-  const importRes = await augflowPost(settings, "/api/tasks/jira/import-by-key", {
-    issue_key: issueKey,
-  });
+  const projectPath = (options.projectPath ?? settings.projectPath).trim();
+  if (!projectPath) {
+    return { ok: false, message: "Set default project in extension options." };
+  }
+
+  const startAfterImport = options.startAfterImport ?? settings.autoStartCard;
+  const repoSlug = (
+    options.repoSlug?.trim() ||
+    getDefaultRepo(settings, projectPath) ||
+    (await resolveDefaultRepoSlugForProject(settings, projectPath))
+  ).trim();
+
+  const importRes = await augflowPost(
+    settings,
+    "/api/tasks/jira/import-by-key",
+    { issue_key: issueKey },
+    projectPath
+  );
   if (!importRes.ok) {
     return { ok: false, message: importRes.message };
   }
 
-  if (settings.autoStartCard) {
-    const startRes = await augflowPost(settings, "/api/cards/start", {
-      task_ids: [issueKey],
-    });
+  if (repoSlug) {
+    const patchRes = await augflowPatchTaskRepo(settings, projectPath, issueKey, repoSlug);
+    if (!patchRes.ok) {
+      return {
+        ok: false,
+        message: `Imported ${issueKey}, but repository update failed: ${patchRes.message}`,
+      };
+    }
+  }
+
+  if (startAfterImport) {
+    const startRes = await augflowPost(
+      settings,
+      "/api/cards/start",
+      { task_ids: [issueKey] },
+      projectPath
+    );
     if (!startRes.ok) {
       return {
         ok: false,
@@ -153,20 +189,81 @@ async function withBadge<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-async function handleImportAttempt(issueKey: string, silent = false): Promise<void> {
-  await withBadge(async () => {
-    const result = await runImportFlow(issueKey);
-    if (!silent) {
-      notify(result.ok ? "Augflow" : "Augflow — error", result.message);
-    } else if (!result.ok) {
-      console.warn("[augflow-bridge]", result.message);
+async function queryContentIssueKey(tabId: number): Promise<string | null> {
+  try {
+    const res = (await chrome.tabs.sendMessage(tabId, {
+      type: "getCurrentIssueKey",
+    })) as GetCurrentIssueKeyResponse | undefined;
+    if (res?.issueKey) {
+      return res.issueKey;
     }
-    return result;
+  } catch {
+    /* Content script not injected */
+  }
+  return null;
+}
+
+async function resolveIssueKeyForTab(tab: chrome.tabs.Tab): Promise<string | null> {
+  if (tab.id == null) {
+    return null;
+  }
+  const fromContent = await queryContentIssueKey(tab.id);
+  if (fromContent) {
+    tabIssueKeys.set(tab.id, fromContent);
+    return fromContent;
+  }
+  return resolvedTabKey(tab.id, tab.url);
+}
+
+async function handleImportAttempt(
+  tab: chrome.tabs.Tab,
+  options: ImportFlowOptions = {},
+  silent = false
+): Promise<FromBackgroundResponse> {
+  const key = await resolveIssueKeyForTab(tab);
+  if (!key) {
+    const msg = "No issue key on this page. Open an issue or use the on-page button.";
+    if (!silent) {
+      notify("Augflow", msg);
+    }
+    return { ok: false, message: msg };
+  }
+
+  return withBadge(() => runImportFlow(key, options));
+}
+
+async function openImportDialogOnTab(tabId: number, issueKey?: string): Promise<void> {
+  const key =
+    issueKey ??
+    tabIssueKeys.get(tabId) ??
+    (await queryContentIssueKey(tabId)) ??
+    null;
+  if (!key) {
+    notify("Augflow", "No issue key on this page.");
+    return;
+  }
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: "openImportDialog", issueKey: key });
+  } catch {
+    notify("Augflow", "Could not open import dialog on this tab.");
+  }
+}
+
+function setupContextMenu(): void {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: CONTEXT_IMPORT_OPTIONS,
+      title: "Import with options…",
+      contexts: ["action"],
+    });
   });
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  void ensureDefaultsOnInstall().then(refreshAllTabs);
+  void ensureDefaultsOnInstall().then(() => {
+    setupContextMenu();
+    return refreshAllTabs();
+  });
 });
 
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
@@ -180,36 +277,138 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
+chrome.tabs.onRemoved.addListener((tabId) => {
+  tabIssueKeys.delete(tabId);
+});
+
 chrome.action.onClicked.addListener((tab) => {
-  const key = tabIssueKeyFromUrl(tab.url);
-  if (!key) {
-    notify("Augflow", "No issue key in this tab URL. Open an issue or use the on-page button.");
-    return;
+  void (async () => {
+    const result = await handleImportAttempt(tab, {}, false);
+    notify(result.ok ? "Augflow" : "Augflow — error", result.message);
+  })();
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === CONTEXT_IMPORT_OPTIONS && tab?.id != null) {
+    void openImportDialogOnTab(tab.id);
   }
-  void handleImportAttempt(key, false);
+});
+
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === "import-with-options" && tab?.id != null) {
+    void openImportDialogOnTab(tab.id);
+  }
 });
 
 chrome.runtime.onMessage.addListener(
-  (msg: ToBackgroundMessage, _sender, sendResponse: (r: FromBackgroundResponse) => void) => {
+  (msg: ToBackgroundMessage, sender, sendResponse) => {
     if (msg.type === "ping") {
-      sendResponse({ ok: true, message: "ok" });
+      sendResponse({ ok: true, message: "ok" } satisfies FromBackgroundResponse);
       return true;
     }
+
+    if (msg.type === "issueKeyChanged") {
+      const tabId = sender.tab?.id;
+      if (tabId != null) {
+        tabIssueKeys.set(tabId, msg.issueKey);
+        void setActionStateForTab(tabId, sender.tab?.url);
+      }
+      return false;
+    }
+
+    if (msg.type === "listProjects") {
+      void (async () => {
+        const settings = await loadSettings();
+        const res = await augflowListProjects(settings);
+        if (!res.ok) {
+          sendResponse({
+            ok: false,
+            message: res.message,
+          } satisfies ListProjectsResponse);
+          return;
+        }
+        sendResponse({
+          ok: true,
+          projects: res.data,
+          defaultProject: settings.projectPath.trim(),
+        } satisfies ListProjectsResponse);
+      })();
+      return true;
+    }
+
+    if (msg.type === "listRepos") {
+      void (async () => {
+        const settings = await loadSettings();
+        const projectPath = msg.projectPath.trim();
+        if (!projectPath) {
+          sendResponse({
+            ok: false,
+            message: "Project is required to list repositories.",
+          } satisfies ListReposResponse);
+          return;
+        }
+        const list = await augflowListRepos(settings, projectPath);
+        if (!list.ok) {
+          sendResponse({ ok: false, message: list.message } satisfies ListReposResponse);
+          return;
+        }
+        let defaultRepoSlug = getDefaultRepo(settings, projectPath);
+        if (!defaultRepoSlug || !list.data.repos.includes(defaultRepoSlug)) {
+          const jiraDefault = await augflowFetchJiraDefaultRepoSlug(settings, projectPath);
+          if (jiraDefault && list.data.repos.includes(jiraDefault)) {
+            defaultRepoSlug = jiraDefault;
+          } else if (list.data.repos[0]) {
+            defaultRepoSlug = list.data.repos[0];
+          } else {
+            defaultRepoSlug = "";
+          }
+        }
+        sendResponse({
+          ok: true,
+          repos: list.data.repos,
+          defaultRepoSlug,
+        } satisfies ListReposResponse);
+      })();
+      return true;
+    }
+
+    if (msg.type === "getImportDefaults") {
+      void (async () => {
+        const settings = await loadSettings();
+        const defaultProject = settings.projectPath.trim();
+        const defaultRepoSlug = defaultProject
+          ? getDefaultRepo(settings, defaultProject) ||
+            (await resolveDefaultRepoSlugForProject(settings, defaultProject))
+          : "";
+        sendResponse({
+          defaultProject,
+          defaultRepoSlug,
+          autoStartCard: settings.autoStartCard,
+        } satisfies ImportDialogDefaults);
+      })();
+      return true;
+    }
+
     if (msg.type === "importIssue") {
       void (async () => {
-        const result = await withBadge(() => runImportFlow(msg.issueKey));
+        const result = await withBadge(() =>
+          runImportFlow(msg.issueKey, {
+            projectPath: msg.projectPath,
+            repoSlug: msg.repoSlug,
+            startAfterImport: msg.startAfterImport,
+          })
+        );
         if (msg.source === "content") {
-          notify(
-            result.ok ? "Augflow" : "Augflow — error",
-            result.message
-          );
+          notify(result.ok ? "Augflow" : "Augflow — error", result.message);
         }
         sendResponse(result);
       })();
       return true;
     }
+
     return false;
   }
 );
 
 void refreshAllTabs();
+setupContextMenu();

@@ -21,6 +21,7 @@
     "url": "https://github.com/deptz/augflow-chrome-extension.git"
   },
   "scripts": {
+    "generate-icons": "node scripts/generate-icons.mjs",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
     "test": "vitest run",

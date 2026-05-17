@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Remote/LAN/HTTPS Augflow base URLs with optional host permission prompt.
+- Default **project identifier** in options (registry key, not absolute-path-only).
+- Board modal / `selectedIssue` import via content-script issue key sync.
+- **Shift+click** import dialog: choose project, repository, and import-only vs import+start.
+- Per-project **default repository** in options; `PATCH` task `repo_slug` after import.
+- **Import with options** shortcut (Ctrl+Shift+U) and context menu.
+
 ## [0.1.0] - 2026-05-09
 
 ### Added

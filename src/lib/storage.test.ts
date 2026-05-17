@@ -1,5 +1,12 @@
 import { describe, expect, vi, beforeEach, it } from "vitest";
-import { DEFAULT_SETTINGS, ensureDefaultsOnInstall, loadSettings, saveSettings } from "./storage";
+import {
+  DEFAULT_SETTINGS,
+  ensureDefaultsOnInstall,
+  getDefaultRepo,
+  loadSettings,
+  saveSettings,
+  withDefaultRepo,
+} from "./storage";
 
 type StoreMap = Record<string, unknown>;
 
@@ -46,6 +53,7 @@ describe("storage helpers", () => {
     expect(s).toEqual({
       augflowBaseUrl: DEFAULT_SETTINGS.augflowBaseUrl,
       projectPath: "",
+      defaultRepoByProject: {},
       apiToken: "",
       autoStartCard: false,
     });
@@ -85,5 +93,15 @@ describe("storage helpers", () => {
   it("saveSettings forwards to chrome.storage.sync", async () => {
     await saveSettings({ projectPath: "/x" });
     expect(backing.projectPath).toBe("/x");
+  });
+
+  it("getDefaultRepo and withDefaultRepo are per-project", async () => {
+    const base = await loadSettings();
+    const updated = {
+      ...base,
+      defaultRepoByProject: withDefaultRepo(base, "my-app", "api"),
+    };
+    expect(getDefaultRepo(updated, "my-app")).toBe("api");
+    expect(getDefaultRepo(updated, "other")).toBe("");
   });
 });
