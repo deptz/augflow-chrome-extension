@@ -1,6 +1,6 @@
 {
   "name": "augflow-jira-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Chrome/Edge extension: import Jira Cloud issues into local Augflow over HTTP",
   "license": "MIT",

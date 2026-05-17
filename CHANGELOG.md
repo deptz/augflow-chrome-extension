@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-17
+
 ### Added
 
 - Remote/LAN/HTTPS Augflow base URLs with optional host permission prompt.
@@ -17,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-project **default repository** in options; `PATCH` task `repo_slug` after import.
 - **Import with options** shortcut (Ctrl+Shift+U) and context menu.
 
+### Changed
+
+- Options page UI polish; import flow refactored into testable modules (`importFlow`, `optionsForm`).
+
+### Fixed
+
+- Options persistence on **Save** and successful **Test connection**; dropdowns restored on reopen; partial storage writes no longer drop saved values.
+- Floating **Import to Augflow** button offset from Atlassian **Rovo** on issue pages.
+- Stale extension context after reload no longer throws uncaught errors on open Jira tabs.
+
 ## [0.1.0] - 2026-05-09
 
 ### Added
@@ -24,5 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial open-source release: MV3 bridge from Jira Cloud (`*.atlassian.net`) to local Augflow (`import-by-key` + optional `cards/start`).
 - Options page, floating page button, toolbar action, tests, ESLint, CI workflow.
 
-[Unreleased]: https://github.com/deptz/augflow-chrome-extension/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/deptz/augflow-chrome-extension/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/deptz/augflow-chrome-extension/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/deptz/augflow-chrome-extension/releases/tag/v0.1.0

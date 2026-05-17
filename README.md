@@ -12,7 +12,7 @@ Open-source **Manifest V3** extension: from a **Jira Cloud** issue page (`*.atla
 
 ## Requirements
 
-- **Augflow** with `/api/tasks/jira/import-by-key`.
+- **[Augflow](https://github.com/deptz/augflow-releases/releases/)** **0.0.7+** with `POST /api/tasks/jira/import-by-key` (and `POST /api/cards/start` if you use auto-start).
 - Node **20+** if you build from source.
 - **Chrome** or **Edge** (MV3).
 
@@ -44,6 +44,8 @@ On a Jira Cloud issue (URL or board modal with `selectedIssue=KEY`):
 - **Ctrl+Shift+U** (Mac: **⌘⇧U**) or context menu **Import with options…** — same dialog.
 
 Board issue drawer URLs like `…/boards/345?selectedIssue=BIF-8246` are supported (content script + `selectedIssue` query).
+
+The floating button sits beside Atlassian **Rovo** on issue pages so both controls stay usable.
 
 ## API flow
 
