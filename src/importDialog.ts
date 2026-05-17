@@ -1,3 +1,4 @@
+import { runtimeSendMessagePromise } from "./lib/extensionContext";
 import type {
   ImportDialogDefaults,
   ListProjectsResponse,
@@ -11,19 +12,6 @@ export type ImportDialogSubmit = {
   repoSlug: string;
   startAfterImport: boolean;
 };
-
-function sendMessage<T>(msg: unknown): Promise<T> {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(msg, (response: T) => {
-      const err = chrome.runtime.lastError?.message;
-      if (err) {
-        reject(new Error(err));
-        return;
-      }
-      resolve(response);
-    });
-  });
-}
 
 export function openImportDialog(
   issueKey: string,
@@ -189,7 +177,7 @@ export function openImportDialog(
     }
 
     try {
-      const res = await sendMessage<ListReposResponse>({
+      const res = await runtimeSendMessagePromise<ListReposResponse>({
         type: "listRepos",
         projectPath,
       });
@@ -284,8 +272,10 @@ export function openImportDialog(
 
     try {
       const [res, defaults] = await Promise.all([
-        sendMessage<ListProjectsResponse>({ type: "listProjects" }),
-        sendMessage<ImportDialogDefaults>({ type: "getImportDefaults" }).catch(() => null),
+        runtimeSendMessagePromise<ListProjectsResponse>({ type: "listProjects" }),
+        runtimeSendMessagePromise<ImportDialogDefaults>({ type: "getImportDefaults" }).catch(
+          () => null
+        ),
       ]);
 
       projectSelect.innerHTML = "";

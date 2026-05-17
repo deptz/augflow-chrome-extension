@@ -1,18 +1,42 @@
 import { openImportDialog } from "./importDialog";
+import { isExtensionContextValid, runtimeSendMessage } from "./lib/extensionContext";
 import { resolveIssueKey } from "./lib/issueKey";
 import type { FromBackgroundResponse, GetCurrentIssueKeyResponse } from "./lib/messages";
 
 const BTN_ID = "augflow-jira-bridge-btn";
+/** Sit left of Atlassian Rovo FAB with a small gap; bottom lifts shorter button to center-align. */
+const FAB_RIGHT = "84px";
+const FAB_BOTTOM = "26px";
 
 function currentIssueKey(): string | null {
   return resolveIssueKey(location.href);
 }
 
+let domObserver: MutationObserver | undefined;
+
+function teardownStaleContentScript(): void {
+  if (routeDebounce !== undefined) {
+    window.clearTimeout(routeDebounce);
+    routeDebounce = undefined;
+  }
+  if (observerDebounce !== undefined) {
+    window.clearTimeout(observerDebounce);
+    observerDebounce = undefined;
+  }
+  domObserver?.disconnect();
+  domObserver = undefined;
+  document.getElementById(BTN_ID)?.remove();
+}
+
 function broadcastIssueKey(): void {
+  if (!isExtensionContextValid()) {
+    teardownStaleContentScript();
+    return;
+  }
   const key = currentIssueKey();
-  chrome.runtime.sendMessage({ type: "issueKeyChanged", issueKey: key }).catch(() => {
-    /* Extension context invalidated */
-  });
+  if (!runtimeSendMessage({ type: "issueKeyChanged", issueKey: key })) {
+    teardownStaleContentScript();
+  }
 }
 
 function runImport(
@@ -24,7 +48,7 @@ function runImport(
     btn.disabled = true;
     btn.textContent = "Importing…";
   }
-  chrome.runtime.sendMessage(
+  const sent = runtimeSendMessage<FromBackgroundResponse>(
     {
       type: "importIssue",
       issueKey,
@@ -33,7 +57,7 @@ function runImport(
       repoSlug: opts.repoSlug,
       startAfterImport: opts.startAfterImport,
     } as const,
-    (_res: FromBackgroundResponse) => {
+    () => {
       const lastErr = chrome.runtime.lastError?.message;
       if (btn) {
         if (lastErr) {
@@ -44,6 +68,12 @@ function runImport(
       }
     }
   );
+  if (!sent && btn) {
+    btn.disabled = false;
+    btn.textContent = "Import to Augflow";
+    btn.title = "Extension was updated — refresh this page to continue.";
+    teardownStaleContentScript();
+  }
 }
 
 function injectButton(): void {
@@ -63,8 +93,8 @@ function injectButton(): void {
   btn.setAttribute("aria-label", "Import current Jira issue to Augflow");
   Object.assign(btn.style, {
     position: "fixed",
-    bottom: "16px",
-    right: "16px",
+    bottom: FAB_BOTTOM,
+    right: FAB_RIGHT,
     zIndex: "2147483646",
     padding: "8px 12px",
     fontSize: "13px",
@@ -112,11 +142,19 @@ let routeDebounce: number | undefined;
 let observerDebounce: number | undefined;
 
 function scheduleRefresh(): void {
+  if (!isExtensionContextValid()) {
+    teardownStaleContentScript();
+    return;
+  }
   if (routeDebounce !== undefined) {
     window.clearTimeout(routeDebounce);
   }
   routeDebounce = window.setTimeout(() => {
     routeDebounce = undefined;
+    if (!isExtensionContextValid()) {
+      teardownStaleContentScript();
+      return;
+    }
     injectButton();
     broadcastIssueKey();
   }, 300);
@@ -137,12 +175,20 @@ function hookSpaNavigation(): void {
 }
 
 function hookDomObserver(): void {
-  const observer = new MutationObserver(() => {
+  domObserver = new MutationObserver(() => {
+    if (!isExtensionContextValid()) {
+      teardownStaleContentScript();
+      return;
+    }
     if (observerDebounce !== undefined) {
       window.clearTimeout(observerDebounce);
     }
     observerDebounce = window.setTimeout(() => {
       observerDebounce = undefined;
+      if (!isExtensionContextValid()) {
+        teardownStaleContentScript();
+        return;
+      }
       const prev = document.getElementById(BTN_ID);
       const key = currentIssueKey();
       if (key && !prev) {
@@ -153,7 +199,7 @@ function hookDomObserver(): void {
       broadcastIssueKey();
     }, 300);
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  domObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -171,8 +217,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         anchor.id = BTN_ID;
         Object.assign(anchor.style, {
           position: "fixed",
-          bottom: "16px",
-          right: "16px",
+          bottom: FAB_BOTTOM,
+          right: FAB_RIGHT,
         } as CSSStyleDeclaration);
         document.body.appendChild(anchor);
       }
