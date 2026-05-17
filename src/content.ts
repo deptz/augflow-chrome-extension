@@ -58,7 +58,8 @@ function injectButton(): void {
   btn.id = BTN_ID;
   btn.type = "button";
   btn.textContent = "Import to Augflow";
-  btn.title = "Click to import. Shift+click for project, repository, and start options.";
+  btn.title =
+    "Click for project, repository, and start options. Shift+click to import with saved defaults.";
   btn.setAttribute("aria-label", "Import current Jira issue to Augflow");
   Object.assign(btn.style, {
     position: "fixed",
@@ -90,18 +91,18 @@ function injectButton(): void {
       return;
     }
     if (e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      openImportDialog(k, btn, (choice) => {
-        runImport(k, {
-          projectPath: choice.projectPath,
-          repoSlug: choice.repoSlug,
-          startAfterImport: choice.startAfterImport,
-        });
-      });
+      runImport(k, {});
       return;
     }
-    runImport(k, {});
+    e.preventDefault();
+    e.stopPropagation();
+    openImportDialog(k, btn, (choice) => {
+      runImport(k, {
+        projectPath: choice.projectPath,
+        repoSlug: choice.repoSlug,
+        startAfterImport: choice.startAfterImport,
+      });
+    });
   });
 
   document.body.appendChild(btn);

@@ -90,9 +90,13 @@ describe("storage helpers", () => {
     expect(backing.augflowBaseUrl).toBe("http://127.0.0.1:8080");
   });
 
-  it("saveSettings forwards to chrome.storage.sync", async () => {
+  it("saveSettings merges with existing values in chrome.storage.sync", async () => {
+    backing.augflowBaseUrl = "http://localhost:3000";
+    backing.apiToken = "keep-me";
     await saveSettings({ projectPath: "/x" });
     expect(backing.projectPath).toBe("/x");
+    expect(backing.augflowBaseUrl).toBe("http://localhost:3000");
+    expect(backing.apiToken).toBe("keep-me");
   });
 
   it("getDefaultRepo and withDefaultRepo are per-project", async () => {

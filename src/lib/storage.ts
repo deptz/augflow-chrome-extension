@@ -8,7 +8,7 @@ export interface ExtensionSettings {
   defaultRepoByProject: DefaultRepoByProject;
   /** Optional Bearer token when Augflow api.api_token is set. */
   apiToken: string;
-  /** After successful import on normal click, call POST /api/cards/start */
+  /** After successful quick import, call POST /api/cards/start */
   autoStartCard: boolean;
 }
 
@@ -81,7 +81,8 @@ export async function loadSettings(): Promise<ExtensionSettings> {
 }
 
 export async function saveSettings(partial: Partial<ExtensionSettings>): Promise<void> {
-  await area().set(partial);
+  const current = await loadSettings();
+  await area().set({ ...current, ...partial });
 }
 
 /** Best-effort: seed defaults once. */

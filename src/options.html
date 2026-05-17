@@ -23,7 +23,6 @@
       }
       input[type="text"],
       input[type="password"],
-      textarea,
       select {
         width: 100%;
         box-sizing: border-box;
@@ -32,9 +31,6 @@
         border: 1px solid #dfe1e6;
         border-radius: 4px;
         font: inherit;
-      }
-      textarea {
-        min-height: 2.5rem;
       }
       .hint {
         font-size: 0.85rem;
@@ -114,6 +110,24 @@
       .shortcuts .desc {
         color: #42526e;
       }
+      .checkbox-field {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        margin-top: 1.25rem;
+      }
+      .checkbox-field input[type="checkbox"] {
+        width: auto;
+        margin: 0.2rem 0 0;
+        flex-shrink: 0;
+        cursor: pointer;
+      }
+      .checkbox-field label {
+        display: inline;
+        font-weight: 400;
+        margin: 0;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -130,12 +144,15 @@
       Default <code>http://localhost:4400</code>. Local dev, LAN, or HTTPS team server.
       Chrome will ask to allow the host on first save or test.
     </p>
+    <div class="row">
+      <button type="button" class="secondary" id="testConn">Test connection</button>
+    </div>
 
-    <label for="projectPath">Default project (<code>X-Project-Path</code>)</label>
+    <label for="projectPathSelect">Default project (<code>X-Project-Path</code>)</label>
+    <input id="projectPath" type="hidden" />
     <select id="projectPathSelect" style="display: none"></select>
-    <textarea id="projectPath" rows="2" spellcheck="false" placeholder="my-app"></textarea>
-    <p class="hint">
-      Project identifier from Augflow’s project switcher (registry key, not necessarily a filesystem path).
+    <p id="projectPathHint" class="hint">
+      Project identifier from Augflow's project switcher. Load projects via Test connection first.
     </p>
 
     <label for="defaultRepoSlug">Default repository</label>
@@ -143,15 +160,18 @@
     <p id="defaultRepoHint" class="hint">
       Repository slug for the selected default project. Load projects via Test connection first.
     </p>
+    <p class="hint">Changes are stored when you click <strong>Save</strong> or after a successful <strong>Test connection</strong>.</p>
 
     <label for="apiToken">API token (optional)</label>
     <input id="apiToken" type="password" autocomplete="off" placeholder="Bearer token if api.api_token is set" />
     <p class="hint">Stored only in extension sync storage; never injected into Jira pages.</p>
 
-    <label class="row" style="margin-top: 1.25rem">
+    <div class="checkbox-field">
       <input id="autoStartCard" type="checkbox" />
-      After import (normal click), start a card automatically
-    </label>
+      <label for="autoStartCard">
+        After quick import (Shift+click on the page button, toolbar, or ⌘⇧Y / Ctrl+Shift+Y), start a card automatically
+      </label>
+    </div>
 
     <h2>Shortcuts on Jira</h2>
     <ul class="shortcuts" aria-label="Keyboard shortcuts">
@@ -165,6 +185,10 @@
       </li>
       <li>
         <span class="desc">Import with options (floating button on the page)</span>
+        <kbd>Click</kbd>
+      </li>
+      <li>
+        <span class="desc">Quick import with defaults (floating button on the page)</span>
         <kbd>Shift + click</kbd>
       </li>
       <li>
@@ -179,7 +203,6 @@
 
     <div class="row">
       <button type="button" id="save">Save</button>
-      <button type="button" class="secondary" id="testConn">Test connection</button>
     </div>
 
     <div id="status"></div>

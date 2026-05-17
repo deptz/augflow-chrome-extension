@@ -30,18 +30,18 @@ Open **Options** (extension details → Extension options).
 | **Default project** | Project identifier for `X-Project-Path` (same value as Augflow’s project switcher — usually a registry **key**, not a filesystem path). |
 | **Default repository** | Per-project repo slug from `GET /api/config/repos` (shown after Test connection). Applied via `PATCH /api/tasks/{id}` after import. |
 | **API token** | Optional `Authorization: Bearer …` if Augflow `api.api_token` is set. |
-| **Auto-start card** | On **normal** import, also call `POST /api/cards/start`. |
+| **Auto-start card** | On **quick** import (toolbar, ⌘⇧Y / Ctrl+Shift+Y, Shift+click), also call `POST /api/cards/start`. |
 
-**Test connection** calls `GET /health` and loads registered projects for the default-project dropdown.
+**Test connection** (below base URL) calls `GET /health` and loads the **default project** and **default repository** dropdowns.
 
 ## Usage
 
 On a Jira Cloud issue (URL or board modal with `selectedIssue=KEY`):
 
-- **Toolbar** / **Ctrl+Shift+Y** (Mac: **⌘⇧Y**) — import using default project and auto-start setting.
-- **Floating “Import to Augflow”** — same as toolbar.
-- **Shift+click** floating button — dialog: pick **project**, **repository**, and **Import only** vs **Import + start**.
-- **Ctrl+Shift+U** (Mac: **⌘⇧U**) or context menu **Import with options…** — same dialog when the toolbar cannot detect Shift.
+- **Toolbar** / **Ctrl+Shift+Y** (Mac: **⌘⇧Y**) — **quick import** with default project, repository, and auto-start setting.
+- **Shift+click** floating **Import to Augflow** button — same quick import.
+- **Click** floating button — dialog: pick **project**, **repository**, and **Import only** vs **Import + start**.
+- **Ctrl+Shift+U** (Mac: **⌘⇧U**) or context menu **Import with options…** — same dialog.
 
 Board issue drawer URLs like `…/boards/345?selectedIssue=BIF-8246` are supported (content script + `selectedIssue` query).
 

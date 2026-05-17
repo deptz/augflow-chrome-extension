@@ -2,9 +2,8 @@ import {
   augflowFetchJiraDefaultRepoSlug,
   augflowListProjects,
   augflowListRepos,
-  augflowPatchTaskRepo,
-  augflowPost,
 } from "./lib/augflowClient";
+import { runImportFlow, type ImportFlowOptions } from "./importFlow";
 import { extractIssueKeyFromUrl } from "./lib/issueKey";
 import type {
   FromBackgroundResponse,
@@ -86,11 +85,8 @@ async function refreshAllTabs(): Promise<void> {
   }
 }
 
-export type ImportFlowOptions = {
-  projectPath?: string;
-  repoSlug?: string;
-  startAfterImport?: boolean;
-};
+export type { ImportFlowOptions };
+export { runImportFlow };
 
 async function resolveDefaultRepoSlugForProject(
   settings: Awaited<ReturnType<typeof loadSettings>>,
@@ -109,65 +105,6 @@ async function resolveDefaultRepoSlugForProject(
     return jiraDefault;
   }
   return list.data.repos[0] ?? "";
-}
-
-export async function runImportFlow(
-  issueKey: string,
-  options: ImportFlowOptions = {}
-): Promise<FromBackgroundResponse> {
-  const settings = await loadSettings();
-  const projectPath = (options.projectPath ?? settings.projectPath).trim();
-  if (!projectPath) {
-    return { ok: false, message: "Set default project in extension options." };
-  }
-
-  const startAfterImport = options.startAfterImport ?? settings.autoStartCard;
-  const repoSlug = (
-    options.repoSlug?.trim() ||
-    getDefaultRepo(settings, projectPath) ||
-    (await resolveDefaultRepoSlugForProject(settings, projectPath))
-  ).trim();
-
-  const importRes = await augflowPost(
-    settings,
-    "/api/tasks/jira/import-by-key",
-    { issue_key: issueKey },
-    projectPath
-  );
-  if (!importRes.ok) {
-    return { ok: false, message: importRes.message };
-  }
-
-  if (repoSlug) {
-    const patchRes = await augflowPatchTaskRepo(settings, projectPath, issueKey, repoSlug);
-    if (!patchRes.ok) {
-      return {
-        ok: false,
-        message: `Imported ${issueKey}, but repository update failed: ${patchRes.message}`,
-      };
-    }
-  }
-
-  if (startAfterImport) {
-    const startRes = await augflowPost(
-      settings,
-      "/api/cards/start",
-      { task_ids: [issueKey] },
-      projectPath
-    );
-    if (!startRes.ok) {
-      return {
-        ok: false,
-        message: `Imported ${issueKey}, but start failed: ${startRes.message}`,
-      };
-    }
-    return {
-      ok: true,
-      message: `Imported and started card for ${issueKey}.`,
-    };
-  }
-
-  return { ok: true, message: `Imported ${issueKey} into Augflow.` };
 }
 
 function notify(title: string, message: string): void {

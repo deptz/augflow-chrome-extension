@@ -5,7 +5,19 @@ import {
   augflowListRepos,
 } from "./lib/augflowClient";
 import { ensureOriginPermission } from "./lib/augflowPermissions";
-import { validateAugflowBaseUrl } from "./lib/augflowUrl";
+import { originPermissionPattern, validateAugflowBaseUrl } from "./lib/augflowUrl";
+import {
+  applySelectPlan,
+  formatSavedProjectHint,
+  formatSavedRepoHint,
+  HINT_REPO_LOAD_FIRST,
+  isSelectDisplayed,
+  planProjectsPopulate,
+  planReposPopulate,
+  resolveProjectPathValue,
+  resolveRepoSlugFromForm,
+} from "./optionsForm";
+import type { ExtensionSettings } from "./lib/storage";
 import {
   getDefaultRepo,
   loadSettings,
@@ -38,10 +50,8 @@ function setStatus(ok: boolean, text: string): void {
 
 function projectPathValue(): string {
   const select = $("projectPathSelect") as HTMLSelectElement;
-  if (select.style.display !== "none" && select.value) {
-    return select.value.trim();
-  }
-  return ($("projectPath") as HTMLTextAreaElement).value.trim();
+  const hidden = $("projectPath") as HTMLInputElement;
+  return resolveProjectPathValue(isSelectDisplayed(select), select.value, hidden.value);
 }
 
 function mergedSettingsFromForm() {
@@ -53,33 +63,58 @@ function mergedSettingsFromForm() {
   }));
 }
 
+function updateSavedHints(settings: ExtensionSettings): void {
+  const projectSelect = $("projectPathSelect") as HTMLSelectElement;
+  const projectHint = $("projectPathHint") as HTMLParagraphElement;
+  if (!isSelectDisplayed(projectSelect)) {
+    projectHint.textContent = formatSavedProjectHint(settings.projectPath);
+  }
+
+  const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
+  const repoHint = $("defaultRepoHint") as HTMLParagraphElement;
+  if (!isSelectDisplayed(repoSelect)) {
+    repoHint.textContent = formatSavedRepoHint(
+      settings.projectPath,
+      getDefaultRepo(settings, settings.projectPath)
+    );
+  }
+}
+
+function repoSelectReset(): void {
+  const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
+  const hint = $("defaultRepoHint") as HTMLParagraphElement;
+  repoSelect.innerHTML = "";
+  repoSelect.style.display = "none";
+  hint.textContent = HINT_REPO_LOAD_FIRST;
+}
+
 async function populateReposDropdown(projectPath: string): Promise<void> {
   const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
   const hint = $("defaultRepoHint") as HTMLParagraphElement;
-
-  if (!projectPath) {
-    repoSelect.style.display = "none";
-    hint.textContent = "Set a default project first, then Test connection.";
-    return;
-  }
-
   const settings = await mergedSettingsFromForm();
+
+  if (!projectPath.trim()) {
+    const plan = planReposPopulate("", { ok: true, repos: [] });
+    repoSelect.style.display = "none";
+    repoSelect.innerHTML = "";
+    hint.textContent = plan.hint;
+    return;
+  }
+
   const res = await augflowListRepos(settings, projectPath);
+  const plan = planReposPopulate(
+    projectPath,
+    res.ok ? { ok: true, repos: res.data.repos } : { ok: false, message: res.message }
+  );
+
   repoSelect.innerHTML = "";
-
-  if (!res.ok) {
+  if (!plan.showSelect) {
     repoSelect.style.display = "none";
-    hint.textContent = res.message;
+    hint.textContent = plan.hint;
     return;
   }
 
-  if (res.data.repos.length === 0) {
-    repoSelect.style.display = "none";
-    hint.textContent = "No repositories configured for this project in Augflow.";
-    return;
-  }
-
-  for (const slug of res.data.repos) {
+  for (const slug of plan.repos) {
     const opt = document.createElement("option");
     opt.value = slug;
     opt.textContent = slug;
@@ -87,12 +122,12 @@ async function populateReposDropdown(projectPath: string): Promise<void> {
   }
 
   let preferred = getDefaultRepo(settings, projectPath);
-  if (!preferred || !res.data.repos.includes(preferred)) {
+  if (!preferred || !plan.repos.includes(preferred)) {
     const jiraDefault = await augflowFetchJiraDefaultRepoSlug(settings, projectPath);
-    if (jiraDefault && res.data.repos.includes(jiraDefault)) {
+    if (jiraDefault && plan.repos.includes(jiraDefault)) {
       preferred = jiraDefault;
     } else {
-      preferred = res.data.repos[0] ?? "";
+      preferred = plan.repos[0] ?? "";
     }
   }
   if (preferred) {
@@ -100,52 +135,96 @@ async function populateReposDropdown(projectPath: string): Promise<void> {
   }
 
   repoSelect.style.display = "block";
-  hint.textContent = "Default repository for this project (used on normal import and pre-selected in Shift+click dialog).";
+  hint.textContent = plan.hint;
 }
 
 async function populateProjectsDropdown(): Promise<void> {
   const settings = await mergedSettingsFromForm();
   const res = await augflowListProjects(settings);
   const select = $("projectPathSelect") as HTMLSelectElement;
-  const textarea = $("projectPath") as HTMLTextAreaElement;
-  if (!res.ok || res.data.length === 0) {
-    select.style.display = "none";
-    textarea.style.display = "block";
-    return;
+  const hidden = $("projectPath") as HTMLInputElement;
+  const hint = $("projectPathHint") as HTMLParagraphElement;
+  const stored = hidden.value.trim() || settings.projectPath;
+
+  const plan = planProjectsPopulate(
+    res.ok ? { ok: true, projects: res.data.map((p) => p.path) } : { ok: false, message: res.message },
+    stored
+  );
+
+  hint.textContent = plan.hint;
+  applySelectPlan(select, plan);
+  hidden.value = plan.selected;
+
+  if (plan.showSelect) {
+    select.onchange = () => {
+      hidden.value = select.value;
+      void populateReposDropdown(select.value.trim());
+    };
+    await populateReposDropdown(select.value.trim() || plan.selected);
+  } else {
+    repoSelectReset();
+    updateSavedHints(await loadSettings());
   }
-  select.innerHTML = "";
-  for (const p of res.data) {
-    const opt = document.createElement("option");
-    opt.value = p.path;
-    opt.textContent = p.path;
-    select.appendChild(opt);
-  }
-  const current = textarea.value.trim() || settings.projectPath;
-  if (current) {
-    select.value = current;
-    if (!select.value) {
-      const opt = document.createElement("option");
-      opt.value = current;
-      opt.textContent = current;
-      select.appendChild(opt);
-      select.value = current;
-    }
-  }
-  select.style.display = "block";
-  textarea.style.display = "none";
-  select.onchange = () => {
-    textarea.value = select.value;
-    void populateReposDropdown(select.value.trim());
-  };
-  await populateReposDropdown(select.value.trim() || current);
 }
 
 async function fillForm(): Promise<void> {
   const s = await loadSettings();
   ($("augflowBaseUrl") as HTMLInputElement).value = s.augflowBaseUrl;
-  ($("projectPath") as HTMLTextAreaElement).value = s.projectPath;
+  ($("projectPath") as HTMLInputElement).value = s.projectPath;
   ($("apiToken") as HTMLInputElement).value = s.apiToken;
   ($("autoStartCard") as HTMLInputElement).checked = s.autoStartCard;
+
+  const projectSelect = $("projectPathSelect") as HTMLSelectElement;
+  projectSelect.innerHTML = "";
+  projectSelect.style.display = "none";
+  repoSelectReset();
+  updateSavedHints(s);
+}
+
+async function persistSettingsFromForm(): Promise<ExtensionSettings> {
+  const augflowBaseUrl = ($("augflowBaseUrl") as HTMLInputElement).value.trim();
+  const v = validateAugflowBaseUrl(augflowBaseUrl);
+  if (!v.ok) {
+    throw new Error(v.error);
+  }
+
+  const settings = await loadSettings();
+  const projectPath = projectPathValue();
+  const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
+  const repoSlug = resolveRepoSlugFromForm(isSelectDisplayed(repoSelect), repoSelect.value);
+
+  const next: ExtensionSettings = {
+    augflowBaseUrl: v.baseUrl,
+    projectPath,
+    defaultRepoByProject: repoSlug
+      ? withDefaultRepo(settings, projectPath, repoSlug)
+      : settings.defaultRepoByProject,
+    apiToken: ($("apiToken") as HTMLInputElement).value,
+    autoStartCard: ($("autoStartCard") as HTMLInputElement).checked,
+  };
+
+  await saveSettings(next);
+  return next;
+}
+
+async function tryRestoreDropdownsFromStorage(): Promise<void> {
+  const s = await loadSettings();
+  const v = validateAugflowBaseUrl(s.augflowBaseUrl);
+  if (!v.ok || !s.projectPath.trim()) {
+    return;
+  }
+
+  try {
+    const has = await chrome.permissions.contains({
+      origins: [originPermissionPattern(v.baseUrl)],
+    });
+    if (!has) {
+      return;
+    }
+    await populateProjectsDropdown();
+  } catch {
+    /* Best-effort restore; saved hints still show persisted values. */
+  }
 }
 
 async function ensureUrlPermission(baseUrl: string): Promise<boolean> {
@@ -172,24 +251,16 @@ async function onSave(): Promise<void> {
   if (!(await ensureUrlPermission(v.baseUrl))) {
     return;
   }
-  const projectPath = projectPathValue();
-  const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
-  const repoSlug =
-    repoSelect.style.display !== "none" && repoSelect.value
-      ? repoSelect.value.trim()
-      : "";
-  const settings = await loadSettings();
-  await saveSettings({
-    augflowBaseUrl: v.baseUrl,
-    projectPath,
-    defaultRepoByProject: repoSlug
-      ? withDefaultRepo(settings, projectPath, repoSlug)
-      : settings.defaultRepoByProject,
-    apiToken: ($("apiToken") as HTMLInputElement).value,
-    autoStartCard: ($("autoStartCard") as HTMLInputElement).checked,
-  });
+
+  try {
+    await persistSettingsFromForm();
+  } catch (e) {
+    setStatus(false, e instanceof Error ? e.message : String(e));
+    return;
+  }
+
   await fillForm();
-  await populateProjectsDropdown();
+  await tryRestoreDropdownsFromStorage();
   setStatus(true, "Saved.");
 }
 
@@ -203,6 +274,7 @@ async function onTestConn(): Promise<void> {
   if (!(await ensureUrlPermission(v.baseUrl))) {
     return;
   }
+
   const settings = await loadSettings();
   const res = await augflowHealthCheck({
     ...settings,
@@ -213,12 +285,24 @@ async function onTestConn(): Promise<void> {
     setStatus(false, res.message);
     return;
   }
+
   await populateProjectsDropdown();
-  setStatus(true, "Reached Augflow health endpoint OK.");
+
+  try {
+    await persistSettingsFromForm();
+    setStatus(true, "Connected and saved settings.");
+  } catch (e) {
+    setStatus(false, e instanceof Error ? e.message : String(e));
+  }
+}
+
+async function initializeOptionsPage(): Promise<void> {
+  await fillForm();
+  await tryRestoreDropdownsFromStorage();
 }
 
 applyShortcutLabels();
-void fillForm();
+void initializeOptionsPage();
 
 ($("save") as HTMLButtonElement).addEventListener("click", () => {
   void onSave();
