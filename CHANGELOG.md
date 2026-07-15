@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-15
+
 ### Added
 
 - Multi-repository selection: pick one or more repositories per import in both the import dialog (checkbox list) and options page (checkboxes), instead of a single repo dropdown.
@@ -45,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial open-source release: MV3 bridge from Jira Cloud (`*.atlassian.net`) to local Augflow (`import-by-key` + optional `cards/start`).
 - Options page, floating page button, toolbar action, tests, ESLint, CI workflow.
 
-[Unreleased]: https://github.com/deptz/augflow-chrome-extension/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/deptz/augflow-chrome-extension/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/deptz/augflow-chrome-extension/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/deptz/augflow-chrome-extension/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/deptz/augflow-chrome-extension/releases/tag/v0.1.0
