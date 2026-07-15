@@ -12,7 +12,7 @@ export const HINT_REPO_LOAD_FIRST =
 export const HINT_REPO_NEED_PROJECT = "Set a default project first, then Test connection.";
 
 export const HINT_REPO_SUCCESS =
-  "Default repository for this project (used on quick import (Shift+click) and pre-selected in the import dialog).";
+  "Default repositories for this project (used on quick import (Shift+click) and pre-checked in the import dialog).";
 
 export const HINT_REPO_NONE = "No repositories configured for this project in Augflow.";
 
@@ -24,15 +24,16 @@ export function formatSavedProjectHint(projectPath: string): string {
   return `Saved default project: ${path}. Test connection to refresh the list.`;
 }
 
-export function formatSavedRepoHint(projectPath: string, repoSlug: string): string {
+export function formatSavedRepoHint(projectPath: string, slugs: string[]): string {
   if (!projectPath.trim()) {
     return HINT_REPO_LOAD_FIRST;
   }
-  const slug = repoSlug.trim();
-  if (!slug) {
+  const normalized = slugs.map((s) => s.trim()).filter((s) => s !== "");
+  if (normalized.length === 0) {
     return HINT_REPO_LOAD_FIRST;
   }
-  return `Saved default repository: ${slug}. Test connection to refresh the list.`;
+  const noun = normalized.length > 1 ? "repositories" : "repository";
+  return `Saved default ${noun}: ${normalized.join(", ")}. Test connection to refresh the list.`;
 }
 
 export function isSelectDisplayed(select: HTMLElement): boolean {
@@ -51,12 +52,22 @@ export function resolveProjectPathValue(
   return hiddenValue.trim();
 }
 
-/** Repo slug is only persisted when the repo dropdown is visible. */
-export function resolveRepoSlugFromForm(selectDisplayed: boolean, selectValue: string): string {
-  if (selectDisplayed && selectValue.trim()) {
-    return selectValue.trim();
+/** Repo slugs are only persisted when the repo checkbox list is displayed. */
+export function resolveRepoSlugsFromForm(displayed: boolean, checkedValues: string[]): string[] {
+  if (!displayed) {
+    return [];
   }
-  return "";
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of checkedValues) {
+    const slug = raw.trim();
+    if (!slug || seen.has(slug)) {
+      continue;
+    }
+    seen.add(slug);
+    out.push(slug);
+  }
+  return out;
 }
 
 export type ProjectsListResult =

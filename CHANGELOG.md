@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Multi-repository selection: pick one or more repositories per import in both the import dialog (checkbox list) and options page (checkboxes), instead of a single repo dropdown.
+
+### Changed
+
+- `PATCH /api/tasks/{id}` now always sends `repo_slugs` (full array) alongside `repo_slug` (first selected slug) for back-compat with older Augflow backends.
+- Per-project default repositories are now stored as arrays (`defaultRepoByProject: Record<string, string[]>`); previously saved single-repo defaults are migrated automatically on load.
+
 ## [0.2.0] - 2026-05-17
 
 ### Added

@@ -6,7 +6,7 @@ export type ToBackgroundMessage =
       issueKey: string;
       source?: "action" | "content";
       projectPath?: string;
-      repoSlug?: string;
+      repoSlugs?: string[];
       startAfterImport?: boolean;
     }
   | { type: "issueKeyChanged"; issueKey: string | null }
@@ -28,11 +28,11 @@ export type ListProjectsResponse =
   | { ok: false; message: string };
 
 export type ListReposResponse =
-  | { ok: true; repos: string[]; defaultRepoSlug: string }
+  | { ok: true; repos: string[]; defaultRepoSlugs: string[] }
   | { ok: false; message: string };
 
 export type ImportDialogDefaults = {
   defaultProject: string;
-  defaultRepoSlug: string;
+  defaultRepoSlugs: string[];
   autoStartCard: boolean;
 };

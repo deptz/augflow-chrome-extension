@@ -15,7 +15,7 @@ import type {
 } from "./lib/messages";
 import {
   ensureDefaultsOnInstall,
-  getDefaultRepo,
+  getDefaultRepos,
   loadSettings,
 } from "./lib/storage";
 
@@ -88,23 +88,36 @@ async function refreshAllTabs(): Promise<void> {
 export type { ImportFlowOptions };
 export { runImportFlow };
 
-async function resolveDefaultRepoSlugForProject(
+async function resolveDefaultReposForProject(
   settings: Awaited<ReturnType<typeof loadSettings>>,
   projectPath: string
-): Promise<string> {
-  const stored = getDefaultRepo(settings, projectPath);
-  if (stored) {
+): Promise<string[]> {
+  const stored = getDefaultRepos(settings, projectPath);
+  if (stored.length > 0) {
     return stored;
   }
   const list = await augflowListRepos(settings, projectPath);
   if (!list.ok || list.data.repos.length === 0) {
-    return "";
+    return [];
   }
   const jiraDefault = await augflowFetchJiraDefaultRepoSlug(settings, projectPath);
   if (jiraDefault && list.data.repos.includes(jiraDefault)) {
-    return jiraDefault;
+    return [jiraDefault];
   }
-  return list.data.repos[0] ?? "";
+  return list.data.repos[0] ? [list.data.repos[0]] : [];
+}
+
+/** Fallback used when stored defaults are empty or none of them are present in the fetched repo list. */
+async function fallbackReposFromList(
+  settings: Awaited<ReturnType<typeof loadSettings>>,
+  projectPath: string,
+  repos: string[]
+): Promise<string[]> {
+  const jiraDefault = await augflowFetchJiraDefaultRepoSlug(settings, projectPath);
+  if (jiraDefault && repos.includes(jiraDefault)) {
+    return [jiraDefault];
+  }
+  return repos[0] ? [repos[0]] : [];
 }
 
 function notify(title: string, message: string): void {
@@ -289,21 +302,16 @@ chrome.runtime.onMessage.addListener(
           sendResponse({ ok: false, message: list.message } satisfies ListReposResponse);
           return;
         }
-        let defaultRepoSlug = getDefaultRepo(settings, projectPath);
-        if (!defaultRepoSlug || !list.data.repos.includes(defaultRepoSlug)) {
-          const jiraDefault = await augflowFetchJiraDefaultRepoSlug(settings, projectPath);
-          if (jiraDefault && list.data.repos.includes(jiraDefault)) {
-            defaultRepoSlug = jiraDefault;
-          } else if (list.data.repos[0]) {
-            defaultRepoSlug = list.data.repos[0];
-          } else {
-            defaultRepoSlug = "";
-          }
+        let defaultRepoSlugs = getDefaultRepos(settings, projectPath).filter((slug) =>
+          list.data.repos.includes(slug)
+        );
+        if (defaultRepoSlugs.length === 0) {
+          defaultRepoSlugs = await fallbackReposFromList(settings, projectPath, list.data.repos);
         }
         sendResponse({
           ok: true,
           repos: list.data.repos,
-          defaultRepoSlug,
+          defaultRepoSlugs,
         } satisfies ListReposResponse);
       })();
       return true;
@@ -313,13 +321,15 @@ chrome.runtime.onMessage.addListener(
       void (async () => {
         const settings = await loadSettings();
         const defaultProject = settings.projectPath.trim();
-        const defaultRepoSlug = defaultProject
-          ? getDefaultRepo(settings, defaultProject) ||
-            (await resolveDefaultRepoSlugForProject(settings, defaultProject))
-          : "";
+        let defaultRepoSlugs: string[] = [];
+        if (defaultProject) {
+          const stored = getDefaultRepos(settings, defaultProject);
+          defaultRepoSlugs =
+            stored.length > 0 ? stored : await resolveDefaultReposForProject(settings, defaultProject);
+        }
         sendResponse({
           defaultProject,
-          defaultRepoSlug,
+          defaultRepoSlugs,
           autoStartCard: settings.autoStartCard,
         } satisfies ImportDialogDefaults);
       })();
@@ -331,7 +341,7 @@ chrome.runtime.onMessage.addListener(
         const result = await withBadge(() =>
           runImportFlow(msg.issueKey, {
             projectPath: msg.projectPath,
-            repoSlug: msg.repoSlug,
+            repoSlugs: msg.repoSlugs,
             startAfterImport: msg.startAfterImport,
           })
         );

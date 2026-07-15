@@ -9,7 +9,7 @@ const PANEL_ID = "augflow-import-dialog-host";
 
 export type ImportDialogSubmit = {
   projectPath: string;
-  repoSlug: string;
+  repoSlugs: string[];
   startAfterImport: boolean;
 };
 
@@ -67,15 +67,31 @@ export function openImportDialog(
   Object.assign(projectSelect.style, selectStyle());
 
   const repoLabel = document.createElement("label");
-  repoLabel.textContent = "Repository";
+  repoLabel.textContent = "Repositories";
   Object.assign(repoLabel.style, { ...labelStyle(), marginTop: "8px" } as CSSStyleDeclaration);
 
-  const repoSelect = document.createElement("select");
-  Object.assign(repoSelect.style, selectStyle());
-  const repoLoadingOpt = document.createElement("option");
-  repoLoadingOpt.textContent = "Select a project first…";
-  repoSelect.appendChild(repoLoadingOpt);
-  repoSelect.disabled = true;
+  const repoList = document.createElement("div");
+  Object.assign(repoList.style, repoListStyle());
+
+  function setRepoListMessage(text: string): void {
+    repoList.innerHTML = "";
+    const msg = document.createElement("p");
+    msg.textContent = text;
+    Object.assign(msg.style, {
+      margin: "0",
+      fontSize: "12px",
+      color: "#5e6c84",
+    } as CSSStyleDeclaration);
+    repoList.appendChild(msg);
+  }
+
+  function checkedRepoSlugs(): string[] {
+    return Array.from(
+      repoList.querySelectorAll<HTMLInputElement>("input[type=checkbox]:checked")
+    ).map((input) => input.value);
+  }
+
+  setRepoListMessage("Select a project first…");
 
   const actionLabel = document.createElement("span");
   actionLabel.textContent = "After import";
@@ -142,7 +158,7 @@ export function openImportDialog(
     projectLabel,
     projectSelect,
     repoLabel,
-    repoSelect,
+    repoList,
     actionLabel,
     actionGroup,
     status,
@@ -155,23 +171,16 @@ export function openImportDialog(
 
   function updateImportEnabled(): void {
     const hasProject = Boolean(projectSelect.value.trim());
-    const hasRepo = Boolean(repoSelect.value.trim()) && !repoSelect.disabled;
+    const hasRepo = checkedRepoSlugs().length > 0;
     importBtn.disabled = !(hasProject && hasRepo);
   }
 
   async function loadReposForProject(projectPath: string): Promise<void> {
-    repoSelect.innerHTML = "";
-    const loading = document.createElement("option");
-    loading.textContent = "Loading repositories…";
-    repoSelect.appendChild(loading);
-    repoSelect.disabled = true;
+    setRepoListMessage("Loading repositories…");
     updateImportEnabled();
 
     if (!projectPath) {
-      repoSelect.innerHTML = "";
-      const opt = document.createElement("option");
-      opt.textContent = "Select a project first…";
-      repoSelect.appendChild(opt);
+      setRepoListMessage("Select a project first…");
       updateImportEnabled();
       return;
     }
@@ -181,34 +190,34 @@ export function openImportDialog(
         type: "listRepos",
         projectPath,
       });
-      repoSelect.innerHTML = "";
       if (!res.ok) {
         status.textContent = res.message;
-        const opt = document.createElement("option");
-        opt.textContent = "(failed to load)";
-        repoSelect.appendChild(opt);
+        setRepoListMessage("(failed to load)");
         updateImportEnabled();
         return;
       }
       if (res.repos.length === 0) {
         status.textContent = "No repositories configured for this project.";
-        const opt = document.createElement("option");
-        opt.textContent = "(none)";
-        repoSelect.appendChild(opt);
+        setRepoListMessage("(none)");
         updateImportEnabled();
         return;
       }
       status.textContent = "";
+      repoList.innerHTML = "";
       for (const slug of res.repos) {
-        const opt = document.createElement("option");
-        opt.value = slug;
-        opt.textContent = slug;
-        if (slug === res.defaultRepoSlug) {
-          opt.selected = true;
-        }
-        repoSelect.appendChild(opt);
+        const item = document.createElement("label");
+        Object.assign(item.style, repoItemStyle());
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = slug;
+        checkbox.checked = res.defaultRepoSlugs.includes(slug);
+        checkbox.addEventListener("change", () => {
+          status.textContent = "";
+          updateImportEnabled();
+        });
+        item.append(checkbox, document.createTextNode(` ${slug}`));
+        repoList.appendChild(item);
       }
-      repoSelect.disabled = false;
     } catch (e) {
       status.textContent = e instanceof Error ? e.message : String(e);
     }
@@ -238,26 +247,21 @@ export function openImportDialog(
     void loadReposForProject(projectSelect.value.trim());
   });
 
-  repoSelect.addEventListener("change", () => {
-    status.textContent = "";
-    updateImportEnabled();
-  });
-
   importBtn.addEventListener("click", () => {
     const projectPath = projectSelect.value.trim();
-    const repoSlug = repoSelect.value.trim();
+    const repoSlugs = checkedRepoSlugs();
     if (!projectPath) {
       status.textContent = "Select a project.";
       return;
     }
-    if (!repoSlug) {
-      status.textContent = "Select a repository.";
+    if (repoSlugs.length === 0) {
+      status.textContent = "Select at least one repository.";
       return;
     }
     dismiss();
     onSubmit({
       projectPath,
-      repoSlug,
+      repoSlugs,
       startAfterImport: importStartInput.checked,
     });
   });
@@ -340,6 +344,30 @@ function selectStyle(): Partial<CSSStyleDeclaration> {
     fontSize: "13px",
     borderRadius: "4px",
     border: "1px solid #dfe1e6",
+  };
+}
+
+function repoListStyle(): Partial<CSSStyleDeclaration> {
+  return {
+    width: "100%",
+    boxSizing: "border-box",
+    maxHeight: "140px",
+    overflowY: "auto",
+    padding: "6px 8px",
+    marginBottom: "4px",
+    fontSize: "13px",
+    borderRadius: "4px",
+    border: "1px solid #dfe1e6",
+  };
+}
+
+function repoItemStyle(): Partial<CSSStyleDeclaration> {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    padding: "2px 0",
+    cursor: "pointer",
   };
 }
 

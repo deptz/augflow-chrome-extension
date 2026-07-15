@@ -209,16 +209,16 @@ export async function augflowFetchJiraDefaultRepoSlug(
   }
 }
 
-export async function augflowPatchTaskRepo(
+export async function augflowPatchTaskRepos(
   settings: ExtensionSettings,
   projectPath: string,
   taskId: string,
-  repoSlug: string
+  repoSlugs: string[]
 ): Promise<FetchResult<void>> {
   return augflowPatch(
     settings,
     `/api/tasks/${encodeURIComponent(taskId)}`,
-    { repo_slug: repoSlug },
+    { repo_slugs: repoSlugs, repo_slug: repoSlugs[0] },
     projectPath
   );
 }

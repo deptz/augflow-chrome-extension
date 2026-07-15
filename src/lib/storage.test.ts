@@ -2,10 +2,10 @@ import { describe, expect, vi, beforeEach, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
   ensureDefaultsOnInstall,
-  getDefaultRepo,
+  getDefaultRepos,
   loadSettings,
   saveSettings,
-  withDefaultRepo,
+  withDefaultRepos,
 } from "./storage";
 
 type StoreMap = Record<string, unknown>;
@@ -99,13 +99,60 @@ describe("storage helpers", () => {
     expect(backing.apiToken).toBe("keep-me");
   });
 
-  it("getDefaultRepo and withDefaultRepo are per-project", async () => {
+  it("getDefaultRepos and withDefaultRepos are per-project", async () => {
     const base = await loadSettings();
     const updated = {
       ...base,
-      defaultRepoByProject: withDefaultRepo(base, "my-app", "api"),
+      defaultRepoByProject: withDefaultRepos(base, "my-app", ["api"]),
     };
-    expect(getDefaultRepo(updated, "my-app")).toBe("api");
-    expect(getDefaultRepo(updated, "other")).toBe("");
+    expect(getDefaultRepos(updated, "my-app")).toEqual(["api"]);
+    expect(getDefaultRepos(updated, "other")).toEqual([]);
+  });
+
+  it("withDefaultRepos supports multiple repos and trims/dedupes", async () => {
+    const base = await loadSettings();
+    const updated = {
+      ...base,
+      defaultRepoByProject: withDefaultRepos(base, "my-app", [" api ", "web", "api", ""]),
+    };
+    expect(getDefaultRepos(updated, "my-app")).toEqual(["api", "web"]);
+  });
+
+  it("withDefaultRepos returns shallow copy unchanged when key or slugs empty", async () => {
+    const base = await loadSettings();
+    expect(withDefaultRepos(base, "", ["api"])).toEqual(base.defaultRepoByProject);
+    expect(withDefaultRepos(base, "my-app", [])).toEqual(base.defaultRepoByProject);
+    expect(withDefaultRepos(base, "my-app", ["  "])).toEqual(base.defaultRepoByProject);
+  });
+
+  it("migrates legacy single-string per-project default on load", async () => {
+    backing.defaultRepoByProject = { "my-app": "api" };
+    const s = await loadSettings();
+    expect(getDefaultRepos(s, "my-app")).toEqual(["api"]);
+  });
+
+  it("drops empty legacy string value for a project", async () => {
+    backing.defaultRepoByProject = { "my-app": "   " };
+    const s = await loadSettings();
+    expect(getDefaultRepos(s, "my-app")).toEqual([]);
+    expect(s.defaultRepoByProject).not.toHaveProperty("my-app");
+  });
+
+  it("round-trips array values, trimming and deduping and dropping empties", async () => {
+    backing.defaultRepoByProject = { "my-app": [" api ", "web", "api", "", "  "] };
+    const s = await loadSettings();
+    expect(getDefaultRepos(s, "my-app")).toEqual(["api", "web"]);
+  });
+
+  it("skips empty/whitespace project keys", async () => {
+    backing.defaultRepoByProject = { "  ": ["api"], "my-app": ["web"] };
+    const s = await loadSettings();
+    expect(Object.keys(s.defaultRepoByProject)).toEqual(["my-app"]);
+  });
+
+  it("ignores malformed defaultRepoByProject payloads", async () => {
+    backing.defaultRepoByProject = "not-an-object";
+    const s = await loadSettings();
+    expect(s.defaultRepoByProject).toEqual({});
   });
 });

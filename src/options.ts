@@ -15,14 +15,14 @@ import {
   planProjectsPopulate,
   planReposPopulate,
   resolveProjectPathValue,
-  resolveRepoSlugFromForm,
+  resolveRepoSlugsFromForm,
 } from "./optionsForm";
 import type { ExtensionSettings } from "./lib/storage";
 import {
-  getDefaultRepo,
+  getDefaultRepos,
   loadSettings,
   saveSettings,
-  withDefaultRepo,
+  withDefaultRepos,
 } from "./lib/storage";
 
 function $(id: string): HTMLElement {
@@ -63,6 +63,25 @@ function mergedSettingsFromForm() {
   }));
 }
 
+function checkedRepoSlugsInContainer(container: HTMLElement): string[] {
+  return Array.from(
+    container.querySelectorAll<HTMLInputElement>("input[type=checkbox]:checked")
+  ).map((input) => input.value);
+}
+
+function renderRepoCheckboxes(container: HTMLElement, slugs: string[], checked: string[]): void {
+  container.innerHTML = "";
+  for (const slug of slugs) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = slug;
+    checkbox.checked = checked.includes(slug);
+    label.append(checkbox, document.createTextNode(` ${slug}`));
+    container.appendChild(label);
+  }
+}
+
 function updateSavedHints(settings: ExtensionSettings): void {
   const projectSelect = $("projectPathSelect") as HTMLSelectElement;
   const projectHint = $("projectPathHint") as HTMLParagraphElement;
@@ -70,33 +89,33 @@ function updateSavedHints(settings: ExtensionSettings): void {
     projectHint.textContent = formatSavedProjectHint(settings.projectPath);
   }
 
-  const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
+  const repoContainer = $("defaultRepoSlugs") as HTMLDivElement;
   const repoHint = $("defaultRepoHint") as HTMLParagraphElement;
-  if (!isSelectDisplayed(repoSelect)) {
+  if (!isSelectDisplayed(repoContainer)) {
     repoHint.textContent = formatSavedRepoHint(
       settings.projectPath,
-      getDefaultRepo(settings, settings.projectPath)
+      getDefaultRepos(settings, settings.projectPath)
     );
   }
 }
 
-function repoSelectReset(): void {
-  const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
+function repoCheckboxesReset(): void {
+  const repoContainer = $("defaultRepoSlugs") as HTMLDivElement;
   const hint = $("defaultRepoHint") as HTMLParagraphElement;
-  repoSelect.innerHTML = "";
-  repoSelect.style.display = "none";
+  repoContainer.innerHTML = "";
+  repoContainer.style.display = "none";
   hint.textContent = HINT_REPO_LOAD_FIRST;
 }
 
-async function populateReposDropdown(projectPath: string): Promise<void> {
-  const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
+async function populateReposCheckboxes(projectPath: string): Promise<void> {
+  const repoContainer = $("defaultRepoSlugs") as HTMLDivElement;
   const hint = $("defaultRepoHint") as HTMLParagraphElement;
   const settings = await mergedSettingsFromForm();
 
   if (!projectPath.trim()) {
     const plan = planReposPopulate("", { ok: true, repos: [] });
-    repoSelect.style.display = "none";
-    repoSelect.innerHTML = "";
+    repoContainer.style.display = "none";
+    repoContainer.innerHTML = "";
     hint.textContent = plan.hint;
     return;
   }
@@ -107,34 +126,28 @@ async function populateReposDropdown(projectPath: string): Promise<void> {
     res.ok ? { ok: true, repos: res.data.repos } : { ok: false, message: res.message }
   );
 
-  repoSelect.innerHTML = "";
+  repoContainer.innerHTML = "";
   if (!plan.showSelect) {
-    repoSelect.style.display = "none";
+    repoContainer.style.display = "none";
     hint.textContent = plan.hint;
     return;
   }
 
-  for (const slug of plan.repos) {
-    const opt = document.createElement("option");
-    opt.value = slug;
-    opt.textContent = slug;
-    repoSelect.appendChild(opt);
-  }
-
-  let preferred = getDefaultRepo(settings, projectPath);
-  if (!preferred || !plan.repos.includes(preferred)) {
+  let preferred = getDefaultRepos(settings, projectPath).filter((slug) =>
+    plan.repos.includes(slug)
+  );
+  if (preferred.length === 0) {
     const jiraDefault = await augflowFetchJiraDefaultRepoSlug(settings, projectPath);
     if (jiraDefault && plan.repos.includes(jiraDefault)) {
-      preferred = jiraDefault;
+      preferred = [jiraDefault];
     } else {
-      preferred = plan.repos[0] ?? "";
+      preferred = plan.repos[0] ? [plan.repos[0]] : [];
     }
   }
-  if (preferred) {
-    repoSelect.value = preferred;
-  }
 
-  repoSelect.style.display = "block";
+  renderRepoCheckboxes(repoContainer, plan.repos, preferred);
+
+  repoContainer.style.display = "block";
   hint.textContent = plan.hint;
 }
 
@@ -158,11 +171,11 @@ async function populateProjectsDropdown(): Promise<void> {
   if (plan.showSelect) {
     select.onchange = () => {
       hidden.value = select.value;
-      void populateReposDropdown(select.value.trim());
+      void populateReposCheckboxes(select.value.trim());
     };
-    await populateReposDropdown(select.value.trim() || plan.selected);
+    await populateReposCheckboxes(select.value.trim() || plan.selected);
   } else {
-    repoSelectReset();
+    repoCheckboxesReset();
     updateSavedHints(await loadSettings());
   }
 }
@@ -177,7 +190,7 @@ async function fillForm(): Promise<void> {
   const projectSelect = $("projectPathSelect") as HTMLSelectElement;
   projectSelect.innerHTML = "";
   projectSelect.style.display = "none";
-  repoSelectReset();
+  repoCheckboxesReset();
   updateSavedHints(s);
 }
 
@@ -190,15 +203,19 @@ async function persistSettingsFromForm(): Promise<ExtensionSettings> {
 
   const settings = await loadSettings();
   const projectPath = projectPathValue();
-  const repoSelect = $("defaultRepoSlug") as HTMLSelectElement;
-  const repoSlug = resolveRepoSlugFromForm(isSelectDisplayed(repoSelect), repoSelect.value);
+  const repoContainer = $("defaultRepoSlugs") as HTMLDivElement;
+  const repoSlugs = resolveRepoSlugsFromForm(
+    isSelectDisplayed(repoContainer),
+    checkedRepoSlugsInContainer(repoContainer)
+  );
 
   const next: ExtensionSettings = {
     augflowBaseUrl: v.baseUrl,
     projectPath,
-    defaultRepoByProject: repoSlug
-      ? withDefaultRepo(settings, projectPath, repoSlug)
-      : settings.defaultRepoByProject,
+    defaultRepoByProject:
+      repoSlugs.length > 0
+        ? withDefaultRepos(settings, projectPath, repoSlugs)
+        : settings.defaultRepoByProject,
     apiToken: ($("apiToken") as HTMLInputElement).value,
     autoStartCard: ($("autoStartCard") as HTMLInputElement).checked,
   };

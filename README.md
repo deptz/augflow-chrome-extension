@@ -28,19 +28,19 @@ Open **Options** (extension details → Extension options).
 |---------|--------|
 | **Augflow base URL** | Default `http://localhost:4400`. Local dev, LAN (`http://192.168.x.x`), or HTTPS team server. Chrome asks to allow the host on first save/test. |
 | **Default project** | Project identifier for `X-Project-Path` (same value as Augflow’s project switcher — usually a registry **key**, not a filesystem path). |
-| **Default repository** | Per-project repo slug from `GET /api/config/repos` (shown after Test connection). Applied via `PATCH /api/tasks/{id}` after import. |
+| **Default repositories** | Per-project repo slugs (one or more) from `GET /api/config/repos` (shown after Test connection). Applied via `PATCH /api/tasks/{id}` after import. |
 | **API token** | Optional `Authorization: Bearer …` if Augflow `api.api_token` is set. |
 | **Auto-start card** | On **quick** import (toolbar, ⌘⇧Y / Ctrl+Shift+Y, Shift+click), also call `POST /api/cards/start`. |
 
-**Test connection** (below base URL) calls `GET /health` and loads the **default project** and **default repository** dropdowns.
+**Test connection** (below base URL) calls `GET /health` and loads the **default project** dropdown and **default repositories** checkboxes.
 
 ## Usage
 
 On a Jira Cloud issue (URL or board modal with `selectedIssue=KEY`):
 
-- **Toolbar** / **Ctrl+Shift+Y** (Mac: **⌘⇧Y**) — **quick import** with default project, repository, and auto-start setting.
+- **Toolbar** / **Ctrl+Shift+Y** (Mac: **⌘⇧Y**) — **quick import** with default project, repositories, and auto-start setting.
 - **Shift+click** floating **Import to Augflow** button — same quick import.
-- **Click** floating button — dialog: pick **project**, **repository**, and **Import only** vs **Import + start**.
+- **Click** floating button — dialog: pick **project**, **repositories** (one or more), and **Import only** vs **Import + start**.
 - **Ctrl+Shift+U** (Mac: **⌘⇧U**) or context menu **Import with options…** — same dialog.
 
 Board issue drawer URLs like `…/boards/345?selectedIssue=BIF-8246` are supported (content script + `selectedIssue` query).
@@ -50,7 +50,10 @@ The floating button sits beside Atlassian **Rovo** on issue pages so both contro
 ## API flow
 
 1. `POST {base}/api/tasks/jira/import-by-key` — `{ "issue_key": "PROJ-123" }` + `X-Project-Path`.
-2. If starting a card — `POST {base}/api/cards/start` — `{ "task_ids": ["PROJ-123"] }`.
+2. If repositories are selected — `PATCH {base}/api/tasks/{id}` — `{ "repo_slugs": ["a", "b"], "repo_slug": "a" }` (both fields always sent; `repo_slug` is the first selected slug, for back-compat with older Augflow backends).
+3. If starting a card — `POST {base}/api/cards/start` — `{ "task_ids": ["PROJ-123"] }`.
+
+Selecting more than one repository requires a matching Augflow backend build — one that accepts `repo_slugs` on `PATCH /api/tasks/{id}`. Selecting a single repository still works against older backends that only understand `repo_slug`.
 
 ## Build from source
 

@@ -12,7 +12,7 @@ import {
   planProjectsPopulate,
   planReposPopulate,
   resolveProjectPathValue,
-  resolveRepoSlugFromForm,
+  resolveRepoSlugsFromForm,
 } from "./optionsForm";
 
 describe("resolveProjectPathValue", () => {
@@ -29,11 +29,18 @@ describe("resolveProjectPathValue", () => {
   });
 });
 
-describe("resolveRepoSlugFromForm", () => {
-  it("returns slug only when repo select is visible", () => {
-    expect(resolveRepoSlugFromForm(true, "api")).toBe("api");
-    expect(resolveRepoSlugFromForm(false, "api")).toBe("");
-    expect(resolveRepoSlugFromForm(true, "")).toBe("");
+describe("resolveRepoSlugsFromForm", () => {
+  it("returns checked slugs only when the checkbox list is visible", () => {
+    expect(resolveRepoSlugsFromForm(true, ["api", "web"])).toEqual(["api", "web"]);
+    expect(resolveRepoSlugsFromForm(false, ["api"])).toEqual([]);
+    expect(resolveRepoSlugsFromForm(true, [])).toEqual([]);
+  });
+
+  it("trims and dedupes checked values", () => {
+    expect(resolveRepoSlugsFromForm(true, [" api ", "web", "api", "", "  "])).toEqual([
+      "api",
+      "web",
+    ]);
   });
 });
 
@@ -138,11 +145,17 @@ describe("saved selection hints", () => {
   });
 
   it("shows saved repository when project and repo set", () => {
-    expect(formatSavedRepoHint("my-app", "api")).toContain("api");
+    expect(formatSavedRepoHint("my-app", ["api"])).toContain("api");
+  });
+
+  it("uses plural noun and joins slugs when multiple repos saved", () => {
+    const hint = formatSavedRepoHint("my-app", ["api", "web"]);
+    expect(hint).toContain("repositories");
+    expect(hint).toContain("api, web");
   });
 
   it("falls back when repo missing", () => {
-    expect(formatSavedRepoHint("my-app", "")).toBe(HINT_REPO_LOAD_FIRST);
+    expect(formatSavedRepoHint("my-app", [])).toBe(HINT_REPO_LOAD_FIRST);
   });
 });
 

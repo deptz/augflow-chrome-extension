@@ -41,7 +41,7 @@ function broadcastIssueKey(): void {
 
 function runImport(
   issueKey: string,
-  opts: { projectPath?: string; repoSlug?: string; startAfterImport?: boolean }
+  opts: { projectPath?: string; repoSlugs?: string[]; startAfterImport?: boolean }
 ): void {
   const btn = document.getElementById(BTN_ID) as HTMLButtonElement | null;
   if (btn) {
@@ -54,7 +54,7 @@ function runImport(
       issueKey,
       source: "content",
       projectPath: opts.projectPath,
-      repoSlug: opts.repoSlug,
+      repoSlugs: opts.repoSlugs,
       startAfterImport: opts.startAfterImport,
     } as const,
     () => {
@@ -129,7 +129,7 @@ function injectButton(): void {
     openImportDialog(k, btn, (choice) => {
       runImport(k, {
         projectPath: choice.projectPath,
-        repoSlug: choice.repoSlug,
+        repoSlugs: choice.repoSlugs,
         startAfterImport: choice.startAfterImport,
       });
     });
@@ -225,7 +225,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       openImportDialog(k, anchor, (choice) => {
         runImport(k, {
           projectPath: choice.projectPath,
-          repoSlug: choice.repoSlug,
+          repoSlugs: choice.repoSlugs,
           startAfterImport: choice.startAfterImport,
         });
       });
